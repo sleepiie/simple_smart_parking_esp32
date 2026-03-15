@@ -1,0 +1,34 @@
+# PlatformIO build files
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# PlatformIO local configuration
+platformio.ini.bak
+platformio.local.ini
+
+# VSCode settings (optional)
+.vscode/
+
+# Compiled files
+*.o
+*.a
+*.elf
+*.bin
+*.hex
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache (PlatformIO uses Python)
+__pycache__/
+*.pyc
+*.pyo
+
+# Temporary files
+*.tmp
+*.temp
