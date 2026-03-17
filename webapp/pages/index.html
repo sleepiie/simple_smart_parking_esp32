@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking Dashboard</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #f4f4f9; 
+            margin: 0;
+            color: #333;
+        }
+        h1 { 
+            text-align: center; 
+            margin-bottom: 30px; 
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+            flex: 1;
+        }
+        h2 {
+            margin-top: 0;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        #rfid-log {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #rfid-log li {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            background: #fdfdfd;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        /* ไฮไลท์สีเหลืองอ่อนแว๊บนึงเวลาอัปเดตเวลา */
+        #rfid-log li.updated {
+            background-color: #fff3cd; 
+        }
+        .uid-text {
+            font-family: monospace;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .parking-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .slot {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 120px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 18px;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            transition: background-color 0.3s ease;
+            text-align: center;
+        }
+        .lux-val {
+            font-size: 14px;
+            font-weight: normal;
+            margin-top: 5px;
+            opacity: 0.9;
+        }
+        
+        .available { background-color: #28a745; } 
+        .occupied { background-color: #dc3545; }  
+        .unavailable { background-color: #6c757d; } 
+        
+    </style>
+</head>
+<body>
+    <h1>Smart Parking Dashboard</h1>
+    
+    <div class="container">
+        <div class="card">
+            <h2>RFID Access Log</h2>
+            <ul id="rfid-log">
+                </ul>
+        </div>
+        
+        <div class="card">
+            <h2>Parking Status</h2>
+            <div class="parking-grid">
+                <div class="slot" id="slot1">
+                    <span id="text-slot1">รอข้อมูล...</span>
+                    <span class="lux-val" id="lux-slot1"></span>
+                </div>
+                <div class="slot" id="slot2">
+                    <span id="text-slot2">รอข้อมูล...</span>
+                    <span class="lux-val" id="lux-slot2"></span>
+                </div>
+                <div class="slot unavailable">Unavailable</div>
+                
+                <div class="slot unavailable">Unavailable</div>
+                <div class="slot unavailable">Unavailable</div>
+                <div class="slot unavailable">Unavailable</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+        function updateSlot(slotId, luxValue) {
+            const slot = document.getElementById(slotId);
+            const textEl = document.getElementById(`text-${slotId}`);
+            const luxEl = document.getElementById(`lux-${slotId}`);
+            
+            luxEl.innerText = `(${luxValue.toFixed(1)} Lux)`;
+
+            if (luxValue > 15) {
+                slot.className = 'slot available';
+                textEl.innerText = 'ว่าง';
+            } else {
+                slot.className = 'slot occupied';
+                textEl.innerText = 'มีรถจอด';
+            }
+        }
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'rfid') {
+                    const logUl = document.getElementById('rfid-log');
+                    const timeString = new Date().toLocaleTimeString();
+                    
+                    const safeUidId = 'log-' + data.uid.replace(/\s+/g, '-');
+                    let existingLi = document.getElementById(safeUidId);
+
+                    if (existingLi) {
+                        existingLi.innerHTML = `<span class="uid-text">${data.uid}</span> - แตะเมื่อ ${timeString}`;
+                        
+                        logUl.insertBefore(existingLi, logUl.firstChild);
+                        
+                        existingLi.classList.add('updated');
+                        setTimeout(() => existingLi.classList.remove('updated'), 500);
+
+                    } else {
+                        const li = document.createElement('li');
+                        li.id = safeUidId;
+                        li.innerHTML = `<span class="uid-text">${data.uid}</span> - แตะเมื่อ ${timeString}`;
+                        
+                        logUl.insertBefore(li, logUl.firstChild); 
+                    }
+
+                } else if (data.type === 'lux') {
+                    updateSlot('slot1', data.sensor1);
+                    updateSlot('slot2', data.sensor2);
+                }
+            } catch (e) {
+                console.error("Error parsing JSON:", e);
+            }
+        };
+    </script>
+</body>
+</html>

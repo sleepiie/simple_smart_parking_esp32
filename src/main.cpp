@@ -3,6 +3,8 @@
 #include <Wire.h>
 #include "rfid.h"
 #include "bh1750.h"
+#include "websocket.h"
+#include "secrets.h"
 
 
 #define SS_PIN  5
@@ -30,26 +32,37 @@ void setup() {
     
     Wire1.begin(SDA2_PIN, SCL2_PIN);
     bh1750_init(Wire1);
+
+    ws_init(WIFI_SSID, WIFI_PASS, SERVER_IP, SERVER_PORT);
     
     Serial.println("Ready!");
     Serial.println("Waiting for RFID cards...");
 }
 
 void loop() {
+
+    ws_loop();
+
+    
     if (rfid_check_card()) {
         uint8_t uid[5]; 
-        
         if (rfid_read_uid(uid)) {
+            char uidStr[16] = "";
+            char hex[4];
+            
             Serial.print("Card UID: ");
             for (int i = 0; i < 4; i++) {
-                Serial.print(uid[i] < 0x10 ? " 0" : " ");
-                Serial.print(uid[i], HEX);
+                sprintf(hex, "%02X ", uid[i]);
+                strcat(uidStr, hex);
+                Serial.print(hex);
             }
             Serial.println();
             
+            ws_send_rfid(uidStr);
             delay(1000); 
         }
     }
+
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
         previousMillis = currentMillis;
@@ -62,6 +75,8 @@ void loop() {
         Serial.print(" Lux | Sensor 2 : ");
         Serial.print(lux2);
         Serial.println(" Lux");
+
+        ws_send_lux(lux1, lux2);
     }
     
     delay(100);
