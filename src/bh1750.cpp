@@ -21,7 +21,8 @@ float bh1750_read_lux(TwoWire& wireObj) {
         uint8_t msb = wireObj.read(); 
         uint8_t lsb = wireObj.read(); 
         level = (msb << 8) | lsb;  
+        return level / 1.2f;
     }
     
-    return level / 1.2f;
+    return -1.0f;
 }

@@ -27,5 +27,6 @@
 void rfid_init(uint8_t ss_pin, uint8_t rst_pin);
 bool rfid_check_card();
 bool rfid_read_uid(uint8_t* uid);
+bool rfid_test_connection();
 
 #endif

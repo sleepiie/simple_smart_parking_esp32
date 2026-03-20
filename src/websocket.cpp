@@ -56,3 +56,9 @@ void ws_send_slot_state(int slotId, bool isParked, float lux) {
              slotId, isParked ? "true" : "false", lux);
     webSocket.sendTXT(json);
 }
+
+void ws_send_error(const char* msg) {
+    char json[512];
+    snprintf(json, sizeof(json), "{\"type\":\"error\",\"message\":\"%s\"}", msg);
+    webSocket.sendTXT(json);
+}

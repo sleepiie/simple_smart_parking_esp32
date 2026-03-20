@@ -37,6 +37,7 @@ struct ParkingSlot {
     TwoWire* wire;
     SlotState state;
     unsigned long timer;
+    bool error_notified;
 };
 
 SystemState currentState = S0_WAITING;
@@ -45,9 +46,11 @@ unsigned long previousMillis = 0;
 const long interval = 1000;
 
 ParkingSlot slots[2] = {
-    {1, &Wire, SLOT_INIT, 0},
-    {2, &Wire1, SLOT_INIT, 0}
+    {1, &Wire, SLOT_INIT, 0, false},
+    {2, &Wire1, SLOT_INIT, 0, false}
 };
+
+bool rfid_error_notified = false;
 
 const int LUX_THRESHOLD = 15;
 const unsigned long DEBOUNCE_TIME = 5000;
@@ -79,77 +82,109 @@ void setup() {
 void loop() {
     ws_loop(); 
 
-    //rfid state machine
-    switch (currentState) {
-        
-        case S0_WAITING:
-            if (rfid_check_card()) {
-                uint8_t uidRaw[5]; 
-                if (rfid_read_uid(uidRaw)) {
-                    char uidStr[16] = "";
-                    char hex[4];
-                    for (int i = 0; i < 4; i++) {
-                        sprintf(hex, "%02X ", uidRaw[i]);
-                        strcat(uidStr, hex);
+    //health check rfid
+    if (!rfid_test_connection()) {
+        if (!rfid_error_notified) {
+            Serial.println("RFID Disconnected!");
+            ws_send_error("โมดูล RFID มีปัญหา โปรดตรวจสอบอุปกรณ์");
+            rfid_error_notified = true;
+        }
+    } else {
+        if (rfid_error_notified) {
+            rfid_error_notified = false;
+            Serial.println("RFID Reconnected.");
+        }
+
+        // rfid state machine
+        switch (currentState) {
+            
+            case S0_WAITING:
+                if (rfid_check_card()) {
+                    uint8_t uidRaw[5]; 
+                    if (rfid_read_uid(uidRaw)) {
+                        char uidStr[16] = "";
+                        char hex[4];
+                        for (int i = 0; i < 4; i++) {
+                            sprintf(hex, "%02X ", uidRaw[i]);
+                            strcat(uidStr, hex);
+                        }
+                        uidStr[strlen(uidStr) - 1] = '\0'; 
+                        
+                        Serial.print("Scanned: ");
+                        Serial.println(uidStr);
+                        
+                        ws_auth_status = 0;
+                        ws_send_rfid(uidStr);
+                        
+                        stateTimer = millis(); 
+                        currentState = S1_CHECKING_WS; 
                     }
-                    uidStr[strlen(uidStr) - 1] = '\0'; 
-                    
-                    Serial.print("Scanned: ");
-                    Serial.println(uidStr);
-                    
-                    ws_auth_status = 0;
-                    ws_send_rfid(uidStr);
-                    
-                    stateTimer = millis(); 
-                    currentState = S1_CHECKING_WS; 
                 }
-            }
-            break;
+                break;
 
-        case S1_CHECKING_WS:
-            if (ws_auth_status == 1 || ws_auth_status == 2) {
-                currentState = S2_RESULT;
-            } else if (millis() - stateTimer > 5000) {
-                Serial.println("Server Timeout! return to s0");
-                currentState = S0_WAITING;
-                delay(1000);
-            }
-            break;
-
-        case S2_RESULT:
-            if (ws_auth_status == 1) {
-                Serial.println("STATUS: ACCEPTED");
-                digitalWrite(LED_GREEN_PIN, HIGH);
-                stateTimer = millis();
-                currentState = S3_GATE_OPEN;
-            } else {
-                Serial.println("STATUS: INVALID CARD");
-                delay(2000);
-                currentState = S0_WAITING;
-            }
-            break;
-
-        case S3_GATE_OPEN:
-            if (millis() - stateTimer >= 10000) {
-                Serial.println("Barrier Closing...");
-                digitalWrite(LED_GREEN_PIN, LOW);
-                currentState = S0_WAITING;
-            } else {
-                if ((millis() - stateTimer) % 2000 == 0) {
-                    Serial.println("Barrier Opening...");
+            case S1_CHECKING_WS:
+                if (ws_auth_status == 1 || ws_auth_status == 2) {
+                    currentState = S2_RESULT;
+                } else if (millis() - stateTimer > 5000) {
+                    Serial.println("Server Timeout! return to s0");
+                    currentState = S0_WAITING;
+                    delay(1000);
                 }
-            }
-            break;
+                break;
+
+            case S2_RESULT:
+                if (ws_auth_status == 1) {
+                    Serial.println("STATUS: ACCEPTED");
+                    digitalWrite(LED_GREEN_PIN, HIGH);
+                    stateTimer = millis();
+                    currentState = S3_GATE_OPEN;
+                } else {
+                    Serial.println("STATUS: INVALID CARD");
+                    delay(2000);
+                    currentState = S0_WAITING;
+                }
+                break;
+
+            case S3_GATE_OPEN:
+                if (millis() - stateTimer >= 10000) {
+                    Serial.println("Barrier Closing...");
+                    digitalWrite(LED_GREEN_PIN, LOW);
+                    currentState = S0_WAITING;
+                } else {
+                    if ((millis() - stateTimer) % 2000 == 0) {
+                        Serial.println("Barrier Opening...");
+                    }
+                }
+                break;
+        }
     }
 
-    //bh1750
+    //health check bh1750
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
         previousMillis = currentMillis;
         
         for (int i = 0; i < 2; i++) {
             float lux = bh1750_read_lux(*(slots[i].wire));
+
+            // ตรวจสอบสายหลุด (ถ้าอ่านได้ค่าติดลบ)
+            if (lux < 0) {
+                if (!slots[i].error_notified) {
+                    char errMsg[256];
+                    sprintf(errMsg, "โมดูลวัดความเข้มแสงของช่อง %d มีปัญหา โปรดตรวจสอบอุปกรณ์", slots[i].id);
+                    Serial.println(errMsg);
+                    ws_send_error(errMsg);
+                    slots[i].error_notified = true;
+                }
+                continue; // ถ้าสายหลุด ให้ข้าม State Machine ของช่องนี้ไปก่อน
+            } else {
+                if (slots[i].error_notified) {
+                    slots[i].error_notified = false;
+                    Serial.println("BH1750 Reconnected");
+                }
+            }
             
+            // bh1750 state machine
             switch (slots[i].state) {
                 case SLOT_INIT:
                     if (slots[i].timer == 0) {

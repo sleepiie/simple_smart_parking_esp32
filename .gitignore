@@ -39,3 +39,6 @@ src/secrets.h
 #nodejs files
 */node_modules
 *-lock.json
+
+#env files
+.env

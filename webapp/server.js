@@ -1,8 +1,37 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+
+//discord connect
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const discordClient = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+const DISCORD_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const MY_DISCORD_USER_ID = process.env.MY_DISCORD_USER_ID;
+
+discordClient.once('ready', () => {
+    console.log(`Discord bot logged in as ${discordClient.user.tag}`);
+});
+discordClient.login(DISCORD_TOKEN);
+
+//discord alert
+function sendDiscordAlert(message) {
+    discordClient.users.fetch(MY_DISCORD_USER_ID).then(user => {
+        const alertEmbed = new EmbedBuilder()
+            .setColor('#ff0000')
+            .setTitle('🚨 Smart Parking Alert')
+            .setDescription(message)
+            .setTimestamp();
+
+        user.send({ embeds: [alertEmbed] })
+            .catch(err => console.error("⚠️ Discord DM Error:", err.message));
+            
+    }).catch(err => console.error("⚠️ หา Discord User ไม่เจอ:", err.message));
+}
 
 const db = new sqlite3.Database('./parking.db', (err) => {
     if (err) console.error("Database connection error:", err.message);
@@ -41,6 +70,8 @@ app.use(express.static(path.join(__dirname, 'pages')));
 
 wss.on('connection', (ws) => {
     console.log('New client connected');
+
+    ws.on('error', (err) => console.error('⚠️ [WS] Connection Error:', err.message));
 
     ws.send(JSON.stringify({ type: 'slot_state', slot: 1, ...latestSlotState[1] }));
     ws.send(JSON.stringify({ type: 'slot_state', slot: 2, ...latestSlotState[2] }));
@@ -85,12 +116,16 @@ wss.on('connection', (ws) => {
         } 
         else if (data.type === 'slot_state') {
             latestSlotState[data.slot] = { is_parked: data.is_parked, lux: data.lux };
-            
+
             wss.clients.forEach(client => {
                 if (client !== ws && client.readyState === WebSocket.OPEN) {
                     client.send(message.toString());
                 }
             });
+        }
+        else if (data.type === 'error') {
+            console.error(`[HARDWARE ERROR] ${data.message}`);
+            sendDiscordAlert(data.message);
         }
     });
 

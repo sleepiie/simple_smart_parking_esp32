@@ -5,6 +5,7 @@ static uint8_t _ss_pin;
 static uint8_t _rst_pin;
 
 //read write register in SPI protocol
+
 static void write_reg(uint8_t addr, uint8_t val) {
     digitalWrite(_ss_pin, LOW);
     SPI.transfer((addr << 1) & 0x7E); // lowest bit is 0 for write
@@ -18,6 +19,11 @@ static uint8_t read_reg(uint8_t addr) {
     uint8_t val = SPI.transfer(0x00);
     digitalWrite(_ss_pin, HIGH);
     return val;
+}
+
+bool rfid_test_connection() {
+    uint8_t v = read_reg(0x37); 
+    return (v == 0x91 || v == 0x92); 
 }
 
 static void set_bit_mask(uint8_t addr, uint8_t mask) {
