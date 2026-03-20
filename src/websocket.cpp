@@ -50,8 +50,9 @@ void ws_send_rfid(const char* uid) {
     webSocket.sendTXT(json);
 }
 
-void ws_send_lux(float lux1, float lux2) {
+void ws_send_slot_state(int slotId, bool isParked, float lux) {
     char json[128];
-    snprintf(json, sizeof(json), "{\"type\":\"lux\",\"sensor1\":%.2f,\"sensor2\":%.2f}", lux1, lux2);
+    snprintf(json, sizeof(json), "{\"type\":\"slot_state\",\"slot\":%d,\"is_parked\":%s,\"lux\":%.2f}", 
+             slotId, isParked ? "true" : "false", lux);
     webSocket.sendTXT(json);
 }

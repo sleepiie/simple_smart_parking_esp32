@@ -24,10 +24,34 @@ enum SystemState {
     S3_GATE_OPEN 
 };
 
+enum SlotState {
+    SLOT_INIT,
+    SLOT_EMPTY,
+    SLOT_VERIFY_PARK,
+    SLOT_PARKED,
+    SLOT_VERIFY_EMPTY
+};
+
+struct ParkingSlot {
+    int id;
+    TwoWire* wire;
+    SlotState state;
+    unsigned long timer;
+};
+
 SystemState currentState = S0_WAITING;
 unsigned long stateTimer = 0; 
 unsigned long previousMillis = 0;
 const long interval = 1000;
+
+ParkingSlot slots[2] = {
+    {1, &Wire, SLOT_INIT, 0},
+    {2, &Wire1, SLOT_INIT, 0}
+};
+
+const int LUX_THRESHOLD = 15;
+const unsigned long DEBOUNCE_TIME = 5000;
+
 
 void setup() {
     Serial.begin(115200);
@@ -50,7 +74,6 @@ void setup() {
     ws_init(WIFI_SSID, WIFI_PASS, SERVER_IP, SERVER_PORT);
     
     Serial.println("Ready!");
-    Serial.println("Waiting for RFID cards...");
 }
 
 void loop() {
@@ -123,9 +146,63 @@ void loop() {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
         previousMillis = currentMillis;
-        float lux1 = bh1750_read_lux(Wire);
-        float lux2 = bh1750_read_lux(Wire1);
-        ws_send_lux(lux1, lux2);
+        
+        for (int i = 0; i < 2; i++) {
+            float lux = bh1750_read_lux(*(slots[i].wire));
+            
+            switch (slots[i].state) {
+                case SLOT_INIT:
+                    if (slots[i].timer == 0) {
+                        slots[i].timer = currentMillis; 
+                    } else if (currentMillis - slots[i].timer >= 2000) {
+                        
+                        if (lux < LUX_THRESHOLD) {
+                            slots[i].state = SLOT_PARKED;
+                            Serial.printf("Slot %d: PARKED (Lux: %.2f)\n", slots[i].id, lux);
+                            ws_send_slot_state(slots[i].id, true, lux);
+                        } else {
+                            slots[i].state = SLOT_EMPTY;
+                            Serial.printf("Slot %d: EMPTY (Lux: %.2f)\n", slots[i].id, lux);
+                            ws_send_slot_state(slots[i].id, false, lux);
+                        }
+                    }
+                    break;
+                
+                case SLOT_EMPTY:
+                    if (lux < LUX_THRESHOLD) {
+                        slots[i].timer = currentMillis;
+                        slots[i].state = SLOT_VERIFY_PARK;
+                    }
+                    break;
+
+                case SLOT_VERIFY_PARK:
+                    if (lux >= LUX_THRESHOLD) {
+                        slots[i].state = SLOT_EMPTY; 
+                    } else if (currentMillis - slots[i].timer >= DEBOUNCE_TIME) {
+                        slots[i].state = SLOT_PARKED;
+                        Serial.printf("Slot %d: PARKED (Lux: %.2f)\n", slots[i].id, lux);
+                        ws_send_slot_state(slots[i].id, true, lux); 
+                    }
+                    break;
+
+                case SLOT_PARKED:
+                    if (lux >= LUX_THRESHOLD) {
+                        slots[i].timer = currentMillis;
+                        slots[i].state = SLOT_VERIFY_EMPTY;
+                    }
+                    break;
+
+                case SLOT_VERIFY_EMPTY:
+                    if (lux < LUX_THRESHOLD) {
+                        slots[i].state = SLOT_PARKED; 
+                    } else if (currentMillis - slots[i].timer >= DEBOUNCE_TIME) {
+                        slots[i].state = SLOT_EMPTY;
+                        Serial.printf("Slot %d: EMPTY (Lux: %.2f)\n", slots[i].id, lux);
+                        ws_send_slot_state(slots[i].id, false, lux);
+                    }
+                    break;
+            }
+        }
     }
     delay(10);
 }

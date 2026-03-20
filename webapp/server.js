@@ -32,10 +32,18 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+let latestSlotState = {
+    1: { is_parked: false, lux: 0 },
+    2: { is_parked: false, lux: 0 }
+};
+
 app.use(express.static(path.join(__dirname, 'pages')));
 
 wss.on('connection', (ws) => {
     console.log('New client connected');
+
+    ws.send(JSON.stringify({ type: 'slot_state', slot: 1, ...latestSlotState[1] }));
+    ws.send(JSON.stringify({ type: 'slot_state', slot: 2, ...latestSlotState[2] }));
 
     ws.on('message', (message) => {
         const data = JSON.parse(message.toString());
@@ -75,7 +83,9 @@ wss.on('connection', (ws) => {
                 }
             });
         } 
-        else if (data.type === 'lux') {
+        else if (data.type === 'slot_state') {
+            latestSlotState[data.slot] = { is_parked: data.is_parked, lux: data.lux };
+            
             wss.clients.forEach(client => {
                 if (client !== ws && client.readyState === WebSocket.OPEN) {
                     client.send(message.toString());

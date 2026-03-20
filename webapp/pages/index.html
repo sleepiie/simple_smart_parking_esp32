@@ -126,22 +126,6 @@
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const ws = new WebSocket(`${protocol}//${window.location.host}`);
 
-        function updateSlot(slotId, luxValue) {
-            const slot = document.getElementById(slotId);
-            const textEl = document.getElementById(`text-${slotId}`);
-            const luxEl = document.getElementById(`lux-${slotId}`);
-            
-            luxEl.innerText = `(${luxValue.toFixed(1)} Lux)`;
-
-            if (luxValue > 15) {
-                slot.className = 'slot available';
-                textEl.innerText = 'ว่าง';
-            } else {
-                slot.className = 'slot occupied';
-                textEl.innerText = 'มีรถจอด';
-            }
-        }
-
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
@@ -153,7 +137,7 @@
                     let existingLi = document.getElementById(safeUidId);
 
                     const statusBadge = data.action === 'IN' 
-                        ? '<span style="color: #28a745; font-weight: bold;">[เข้าจอด]</span>' 
+                        ? '<span style="color: #28a745; font-weight: bold;">[นำรถเข้า]</span>' 
                         : '<span style="color: #dc3545; font-weight: bold;">[นำรถออก]</span>';
 
                     if (existingLi) {
@@ -169,9 +153,21 @@
                         logUl.insertBefore(li, logUl.firstChild); 
                     }
 
-                } else if (data.type === 'lux') {
-                    updateSlot('slot1', data.sensor1);
-                    updateSlot('slot2', data.sensor2);
+                } else if (data.type === 'slot_state') {
+                    const slotId = `slot${data.slot}`;
+                    const slot = document.getElementById(slotId);
+                    const textEl = document.getElementById(`text-${slotId}`);
+                    const luxEl = document.getElementById(`lux-${slotId}`);
+                    
+                    luxEl.innerText = `(${data.lux.toFixed(1)} Lux)`;
+
+                    if (!data.is_parked) {
+                        slot.className = 'slot available';
+                        textEl.innerText = 'ว่าง';
+                    } else {
+                        slot.className = 'slot occupied';
+                        textEl.innerText = 'มีรถจอด';
+                    }
                 }
             } catch (e) {
                 console.error("Error parsing JSON:", e);
