@@ -146,26 +146,26 @@
             try {
                 const data = JSON.parse(event.data);
                 
-                if (data.type === 'rfid') {
+                if (data.type === 'rfid_log') {
                     const logUl = document.getElementById('rfid-log');
                     const timeString = new Date().toLocaleTimeString();
-                    
                     const safeUidId = 'log-' + data.uid.replace(/\s+/g, '-');
                     let existingLi = document.getElementById(safeUidId);
 
+                    const statusBadge = data.action === 'IN' 
+                        ? '<span style="color: #28a745; font-weight: bold;">[เข้าจอด]</span>' 
+                        : '<span style="color: #dc3545; font-weight: bold;">[นำรถออก]</span>';
+
                     if (existingLi) {
-                        existingLi.innerHTML = `<span class="uid-text">${data.uid}</span> - แตะเมื่อ ${timeString}`;
-                        
+                        existingLi.innerHTML = `<span class="uid-text">${data.uid}</span> ${statusBadge} - เมื่อ ${timeString}`;
                         logUl.insertBefore(existingLi, logUl.firstChild);
                         
                         existingLi.classList.add('updated');
                         setTimeout(() => existingLi.classList.remove('updated'), 500);
-
                     } else {
                         const li = document.createElement('li');
                         li.id = safeUidId;
-                        li.innerHTML = `<span class="uid-text">${data.uid}</span> - แตะเมื่อ ${timeString}`;
-                        
+                        li.innerHTML = `<span class="uid-text">${data.uid}</span> ${statusBadge} - เมื่อ ${timeString}`;
                         logUl.insertBefore(li, logUl.firstChild); 
                     }
 

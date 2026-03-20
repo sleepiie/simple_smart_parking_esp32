@@ -6,7 +6,6 @@
 #include "websocket.h"
 #include "secrets.h"
 
-
 #define SS_PIN  5
 #define RST_PIN 27
 
@@ -16,11 +15,26 @@
 #define SDA2_PIN 32 
 #define SCL2_PIN 33
 
+#define LED_GREEN_PIN 26
+
+enum SystemState {
+    S0_WAITING,     
+    S1_CHECKING_WS, 
+    S2_RESULT,    
+    S3_GATE_OPEN 
+};
+
+SystemState currentState = S0_WAITING;
+unsigned long stateTimer = 0; 
 unsigned long previousMillis = 0;
 const long interval = 1000;
 
 void setup() {
     Serial.begin(115200);
+
+    //led
+    pinMode(LED_GREEN_PIN, OUTPUT);
+    digitalWrite(LED_GREEN_PIN, LOW);
     
     //rfid
     SPI.begin(); 
@@ -40,44 +54,78 @@ void setup() {
 }
 
 void loop() {
+    ws_loop(); 
 
-    ws_loop();
-
-    
-    if (rfid_check_card()) {
-        uint8_t uid[5]; 
-        if (rfid_read_uid(uid)) {
-            char uidStr[16] = "";
-            char hex[4];
-            
-            Serial.print("Card UID: ");
-            for (int i = 0; i < 4; i++) {
-                sprintf(hex, "%02X ", uid[i]);
-                strcat(uidStr, hex);
-                Serial.print(hex);
+    //rfid state machine
+    switch (currentState) {
+        
+        case S0_WAITING:
+            if (rfid_check_card()) {
+                uint8_t uidRaw[5]; 
+                if (rfid_read_uid(uidRaw)) {
+                    char uidStr[16] = "";
+                    char hex[4];
+                    for (int i = 0; i < 4; i++) {
+                        sprintf(hex, "%02X ", uidRaw[i]);
+                        strcat(uidStr, hex);
+                    }
+                    uidStr[strlen(uidStr) - 1] = '\0'; 
+                    
+                    Serial.print("Scanned: ");
+                    Serial.println(uidStr);
+                    
+                    ws_auth_status = 0;
+                    ws_send_rfid(uidStr);
+                    
+                    stateTimer = millis(); 
+                    currentState = S1_CHECKING_WS; 
+                }
             }
-            Serial.println();
-            
-            ws_send_rfid(uidStr);
-            delay(1000); 
-        }
+            break;
+
+        case S1_CHECKING_WS:
+            if (ws_auth_status == 1 || ws_auth_status == 2) {
+                currentState = S2_RESULT;
+            } else if (millis() - stateTimer > 5000) {
+                Serial.println("Server Timeout! return to s0");
+                currentState = S0_WAITING;
+                delay(1000);
+            }
+            break;
+
+        case S2_RESULT:
+            if (ws_auth_status == 1) {
+                Serial.println("STATUS: ACCEPTED");
+                digitalWrite(LED_GREEN_PIN, HIGH);
+                stateTimer = millis();
+                currentState = S3_GATE_OPEN;
+            } else {
+                Serial.println("STATUS: INVALID CARD");
+                delay(2000);
+                currentState = S0_WAITING;
+            }
+            break;
+
+        case S3_GATE_OPEN:
+            if (millis() - stateTimer >= 10000) {
+                Serial.println("Barrier Closing...");
+                digitalWrite(LED_GREEN_PIN, LOW);
+                currentState = S0_WAITING;
+            } else {
+                if ((millis() - stateTimer) % 2000 == 0) {
+                    Serial.println("Barrier Opening...");
+                }
+            }
+            break;
     }
 
+    //bh1750
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
         previousMillis = currentMillis;
-        
         float lux1 = bh1750_read_lux(Wire);
         float lux2 = bh1750_read_lux(Wire1);
-        
-        Serial.print("Sensor 1 : ");
-        Serial.print(lux1);
-        Serial.print(" Lux | Sensor 2 : ");
-        Serial.print(lux2);
-        Serial.println(" Lux");
-
         ws_send_lux(lux1, lux2);
     }
-    
-    delay(100);
+    delay(10);
 }

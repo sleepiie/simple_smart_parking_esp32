@@ -3,6 +3,7 @@
 #include <WebSocketsClient.h>
 
 static WebSocketsClient webSocket;
+volatile int ws_auth_status = 0;
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     switch(type) {
@@ -11,6 +12,15 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             break;
         case WStype_CONNECTED:
             Serial.println("[WS] Connected to server!");
+            break;
+        case WStype_TEXT:
+            if (strstr((char*)payload, "\"type\":\"auth\"")) {
+                if (strstr((char*)payload, "\"valid\":true")) {
+                    ws_auth_status = 1;
+                } else if (strstr((char*)payload, "\"valid\":false")) {
+                    ws_auth_status = 2;
+                }
+            }
             break;
     }
 }
