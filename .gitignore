@@ -34,7 +34,7 @@ __pycache__/
 *.temp
 
 # Secret files
-src/secrets.h
+include/secrets.h
 
 #nodejs files
 */node_modules
