@@ -4,14 +4,17 @@
 
 static WebSocketsClient webSocket;
 volatile int ws_auth_status = 0;
+volatile bool ws_connected = false;
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     switch(type) {
         case WStype_DISCONNECTED:
             Serial.println("[WS] Disconnected!");
+            ws_connected = false;
             break;
         case WStype_CONNECTED:
             Serial.println("[WS] Connected to server!");
+            ws_connected = true;
             break;
         case WStype_TEXT:
             if (strstr((char*)payload, "\"type\":\"auth\"")) {

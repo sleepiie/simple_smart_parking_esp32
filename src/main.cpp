@@ -187,9 +187,9 @@ void loop() {
             // bh1750 state machine
             switch (slots[i].state) {
                 case SLOT_INIT:
-                    if (slots[i].timer == 0) {
+                    if (!ws_connected) {
                         slots[i].timer = currentMillis; 
-                    } else if (currentMillis - slots[i].timer >= 2000) {
+                    } else if (currentMillis - slots[i].timer >= 500) {
                         
                         if (lux < LUX_THRESHOLD) {
                             slots[i].state = SLOT_PARKED;
