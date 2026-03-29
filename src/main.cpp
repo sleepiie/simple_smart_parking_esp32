@@ -146,7 +146,7 @@ void loop() {
                 break;
 
             case S3_GATE_OPEN:
-                if (millis() - stateTimer >= 10000) {
+                if (millis() - stateTimer >= 5000) {
                     Serial.println("Barrier Closing...");
                     digitalWrite(LED_GREEN_PIN, LOW);
                     currentState = S0_WAITING;
