@@ -42,3 +42,4 @@ include/secrets.h
 
 #env files
 .env
+*.db
