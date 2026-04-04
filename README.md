@@ -77,6 +77,23 @@ MY_DISCORD_CHANNEL_ID=your_channel_id
 
 ---
 
+## 4. Setup RFID Cards in `server.js`
+
+To allow your RFID cards to work with the system, you need to add your card's UID to the database.
+
+**Where to edit:** 
+Open the `server.js` file located in the `webapp/` folder.
+
+**What to change:**
+Find the following lines in the code (in the database initialization section):
+```javascript
+insertMock.run('99 1C 46 31', 0);
+insertMock.run('79 DE B8 59', 0);
+```
+Change `'99 1C 46 31'` and `'79 DE B8 59'` to your actual RFID card UIDs. Alternatively, you can use *`SQL commands`* to insert your card UIDs directly into the SQLite database.
+
+---
+
 ## How to Run
 
 Running this project is divided into 2 parts: uploading code to the board and starting the server.
